@@ -3,14 +3,18 @@
 
 ## Modem Initialization
 
+* Lines 29187-29189: POKE to modem registers - speed, command mode, Enable relay for auto-answer
+* Line 29190: OPEN modem port
+
+## MISC
+
 * Lines 29000-29002: Define constants like CR, BELL etc
 * Lines 29010-29050: Dimension variables and strings
 * Lines 29060-29075: Get date, time, disk from user
 * Line 29080: Define subroutine pointers like CLM (close modem)
 * Lines 29100-29140: Open config file, Read start sectors, bytes, message counters, Calculate buffer size
 * Lines 29160-29180: Set time variables from user input
-* Lines 29187-29189: POKE to modem registers - speed, command mode, Enable relay for auto-answer
-* Line 29190: OPEN modem port
+
 
 ## Wait for Call
 
