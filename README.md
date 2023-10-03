@@ -4,10 +4,10 @@
 ## Modem Initialization
 
 * Lines 29187-29189: POKE to modem registers - speed, command mode, Enable relay for auto-answer
-* Line 29190: OPEN modem port
 
 ## MISC
 
+* Line 29190: OPEN keyboard device
 * Lines 29000-29002: Define constants like CR, BELL etc
 * Lines 29010-29050: Dimension variables and strings
 * Lines 29060-29075: Get date, time, disk from user
