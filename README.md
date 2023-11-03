@@ -1,54 +1,39 @@
 # AMIS BBS
 ### Breakdown by line number + Source code
 
-## Modem Initialization
-
-* Lines 29187-29189: POKE to modem registers - speed, command mode, Enable relay for auto-answer
-
-## MISC
-
-* Line 29190: OPEN keyboard device
-* Lines 29000-29002: Define constants like CR, BELL etc
-* Lines 29010-29050: Dimension variables and strings
-* Lines 29060-29075: Get date, time, disk from user
-* Line 29080: Define subroutine pointers like CLM (close modem)
-* Lines 29100-29140: Open config file, Read start sectors, bytes, message counters, Calculate buffer size
-* Lines 29160-29180: Set time variables from user input
+STATUS #n, XXX IF PEEK(747) < 128 THEN NOT READY
+IF PEEK(747) >=192 then ready
 
 
-## Wait for Call
 
-* Lines 10170-10180:STATUS check for carrier (bit 7 of 749), Loop waiting for carrier
-* Lines 11000-11050: PRINT answering message, Set timeout in case no carrier, STATUS check for carrier, GET first character to detect Xmodem "I", Loop waiting for carrier
-
-## User Input Loop
-
-* Line 10150: Print prompt, time and date
-* Lines 10160-10162: Check joystick trigger for local input, Check keyboard for local input
-* Line 10170: Jump to answer call if carrier
-* Line 400: Print prompt, GET line input
-* Line 70-140: Input routine, Get character, Handle deletes, backspaces,  Add to line, check length, Sound bell on overflow, Return line
-* Line 1000: Check first char against command codes
-* Line 1050: Dispatch to command handlers
-* Lines 1500-1600: Toggle expert mode
-* Lines 2000-2140: Print time and date
-* Lines 2180-2480: Message scan/read
-* Lines 2600-3400: Message input, edit, save
-* Lines 5000-6800: Upload and download files
+## go to the init routines
 
 ```
-5 GOTO 29000
+5 GOTO 29000 
+```
+
+```
 8 STATUS #MD,X:IF PEEK(749)>ZR THEN GOTO C8
 9 IF PEEK(764)=C255 THEN IF  NOT PEEK(747) OR LOCAL THEN RETURN 
 10 GOSUB GC:IF X<>19 THEN RETURN 
 11 GOSUB GC:IF X=17 OR X=152 THEN RETURN 
 12 IF X=C24 THEN TST=ZR:RETURN 
 15 GOTO 11
+```
+
+## GC: Get Character from modem/local
+
+```
 20 IF LOCAL THEN GET #3,X:RETURN 
 25 STATUS #MD,X:IF PEEK(747) THEN GET #MD,X:? CHR$(X);:RETURN 
 30 IF PEEK(764)<C255 THEN GET #3,X:? CHR$(X);:RETURN 
 40 TOUT=TOUT+WON:IF TOUT>1000 THEN GOSUB OPM
 50 GOTO GC
+```
+
+## GL: Get Line
+
+```
 70 L$="":IF PEEK(53279)=5 THEN POP :GOTO 13000
 80 TOUT=ZR:GOSUB GC:X$=CHR$(X)
 90 IF ((X$=BS$) OR (X$=CHR$(C127) AND AMODE=ZR)) AND L$<>"" THEN ? #MD;BS$;" ";BS$;:L$(LEN(L$))="":GOTO 80
@@ -64,9 +49,19 @@
 210 ? #MD;BF$(F,T);:F=F+C8:GOSUB C8:IF X=24 OR X=152 THEN ? #MD;CR$;"Interrupted";CR$:RETURN 
 215 IF X=16 THEN ? #MD;CR$;"Node:2";CR$:TST=ZR:GOTO 30400
 220 GOTO 200
+```
+
+## CLM: I think this checks the modem
+
+```
 292 TRAP C8080:IF PEEK(864)=C255 OR LOCAL THEN RETURN 
 294 STATUS #MD,X:IF PEEK(749)>ZR THEN 294
 296 X=WON^WON:CLOSE #MD:RETURN 
+```
+
+## OPM: Open modem
+
+```
 310 POKE 77,ZR:GOSUB CLM:IF LOCAL THEN RETURN 
 315 OPEN #MD,13,ZR,"R:"
 320 XIO 36,#MD,ZR,WON,"R:":XIO 34,#MD,240,ZR,"R:"
@@ -78,10 +73,20 @@
 350 X=USR(ADR(SCIO$),16*MD)
 355 IF PEEK(16*MD+835)=WON THEN RETURN 
 360 GOTO OPM
+```
+
+## Yes/No
+
+```
 372 ? #MD;" <Y/N>";:GOSUB GC:IF X>96 THEN X=X-32
 374 IF X=89 THEN X=WON:? #MD;"Y":RETURN 
 376 IF X=78 THEN X=ZR:? #MD;"N":RETURN 
 378 GOTO 372
+```
+
+## Press Return
+
+```
 400 ? #MD;"HIT <RETURN> ";:GOSUB GC
 410 IF X=155 THEN ? #MD:GOTO 500
 420 IF X<>13 AND X<>141 THEN 400
@@ -115,6 +120,11 @@
 910 GOSUB 160
 912 IF TST=WON THEN GOSUB CLM:GOTO 5060
 950 ? #MD:? #MD
+```
+
+## MN: Main menu Loop
+
+```
 1000 GOSUB C2010:TXC=VAL(TM$(WON,MD))*60+VAL(TM$(4,5)):TXE=TXC-TXO:IF TXE<ZR THEN TXE=TXE+C24*60
 1001 GOSUB OPM:IF TXE>=TXA THEN ? #MD;" Sorry, time's up! ";CR$:GOTO 3300
 1002 IF TXA-TXE<=10 THEN ? #MD;CR$;"        ";TXA-TXE;" minutes left"
@@ -138,7 +148,21 @@
 1530 PRMT$="A,B,C,D,E,F,G,H,I,J,K,L,M,Q,R,S,T,U,W"
 1540 PRMT$(LEN(PRMT$)+WON)=CR$
 1550 PRMT$(LEN(PRMT$)+WON)=",X,Y or ? >"
-1560 RETURN 
+1560 RETURN
+```
+
+## clock routine to get current time/date and print to modem
+
+
+- Line 2000 calls the subroutine at line 2010 to get the current time and date, then prints it out along with the minutes remaining in the day. It jumps back to the start to repeat this continuously.
+- Line 2010 reads the realtime clock registers into X, T and calculates the number of seconds T since midnight.
+- Lines 2020-2030 wait for the seconds to increment before continuing.
+- Lines 2040-2090 convert the total seconds to hours, minutes, seconds and back into the clock registers. It handles rolling over to the next day properly.
+- Lines 2100-2140 convert the time values to a string format for printing.
+- The data statements set up strings for the day of week, month, etc.
+
+
+```
 2000 GOSUB 2010:? #MD;"TIME: ";TM$;"   DATE: ";TD$;CR$;"   ";TXA-TXE;" Minutes Remaining";CR$:GOTO MN
 2010 X=PEEK(20):T=((PEEK(18)*C256+PEEK(19))*C256+PEEK(20))/60
 2020 IF X>PEEK(20) THEN 2010
@@ -159,6 +183,11 @@
 2100 TP$=STR$(X+100):TM$=TP$(MD,3)
 2120 TM$(3,5)=STR$(F+100):TM$(6,8)=STR$(T+100)
 2140 TM$(3,3)=":":TM$(6,6)=":":RETURN 
+```
+
+## Message base routines
+
+```
 2180 QRS=-WON:? #MD;"Quick Scan";:GOTO 2210
 2190 QRS=ZR:? #MD;"Retrieve";:GOTO 2210
 2200 QRS=WON:? #MD;"Summary of";
@@ -258,6 +287,11 @@
 3210 LPRINT "MESSAGE ";MSGNO$;"  ";MSECT-A:GOSUB OPM:MSGS=MSGS+WON
 3220 ? #MD;"SAVED AS MSG#";MSGNO$
 3230 GOTO MN
+```
+
+## Logoff the system
+
+```
 3300 ? #MD;"Any Comments";
 3310 GOSUB 372:IF  NOT X THEN 3350
 3320 ? #MD;"Enter comments"
@@ -268,13 +302,28 @@
 3352 ? #MD;"Thanks for calling ";NAM$
 3353 ? #MD;"Please call again..."
 3356 GOTO WR
+```
+
+## switch to line-feed mode
+
+```
 3400 LMODE=64-LMODE:GOSUB OPM:? #MD;"LINE-FEED ";
 3410 IF LMODE THEN ? #MD;"ON":GOTO MN
 3420 ? #MD;"OFF":GOTO MN
+```
+
+## Switch translation ascii/atascii
+
+```
 3500 AMODE=32:GOSUB OPM:? #MD;"HIT <RETURN>";:GOSUB GC:IF X<>155 THEN AMODE=ZR
 3505 GOSUB OPM
 3510 IF AMODE THEN BEL$=CHR$(253):DEL$=CHR$(156):BS$=CHR$(126):? #MD;"ATASCII Mode":GOTO MN
 3520 BEL$=CHR$(7):DEL$=CHR$(C24):BS$=CHR$(C8):? #MD;"ASCII Mode":GOTO MN
+```
+
+## Show callers list
+
+```
 3600 ? #MD;CALLNO;" Callers":GOSUB CLM:CLOSE #FI:OPEN #FI,4,ZR,CDF$
 3610 GOSUB 3680:GOSUB OPM:? #MD;"First Date:";DATE$;"-Last Date:";TD$;CR$;"ENTER Starting Date <MM/DD/YY>";
 3612 GOSUB GL:IF LEN(L$)<>8 THEN GOTO MN
@@ -290,6 +339,11 @@
 3650 GOSUB 3680:GOTO 3625
 3680 GOSUB CLM:TRAP 3690:INPUT #FI,TP$,A$,DATE$,TM$:TRAP C8080:IF TP$<>"*" THEN RETURN 
 3690 POP :CLOSE #FI:GOSUB OPM:GOTO 950
+```
+
+## delete/kill a message in the message base
+
+```
 3900 ? #MD;"Kill Message"
 3910 FL$=MIF$:GOSUB RF
 3920 L=INT(LEN(BF$)/C40)*C40:IF L=ZR THEN ? #MD;"No Messages":GOTO MN
@@ -313,6 +367,11 @@
 4130 GOSUB CLM:CLOSE #FI:OPEN #FI,C8,ZR,MIF$
 4140 ? #FI;BF$:CLOSE #FI:GOSUB 28100
 4150 LPRINT "KILLED MSG ";MSGNO$:GOSUB OPM:? #MD;"MESSAGE DELETED":GOTO MN
+```
+
+## Upload / Download a file
+
+```
 5000 GOSUB 5100:L=X:GOSUB CLM:CLOSE #FI:TRAP 5800:OPEN #FI,4,ZR,FL$:CLOSE #FI
 5010 TRAP 8080:GOSUB 2010:IF L THEN 6000
 5020 LPRINT "DL ";FL$;" ";TM$
@@ -412,6 +471,11 @@
 6840 NEXT I
 6860 ? #FI;BF$(WON,LEN(BF$)-128+X);:CLOSE #FI
 6890 I=WON:T=WON:AMODE=AM:LMODE=LM:GOTO MN
+```
+
+## SR: maybe scan for new messages?
+
+```
 7000 MSGNO$="0000":MSGNO$(5-LEN(STR$(FROM)))=STR$(FROM)
 7020 T=INT(LEN(BF$)/C40):F=INT(T*0.5+0.5):Y=F
 7040 FOR X=WON TO CLOG(T+MD)/CLOG(MD)
@@ -423,12 +487,22 @@
 7130 IF MSGNO$>BF$(TSS-39,TSS-36) AND DIR=WON THEN F=F+WON
 7140 IF MSGNO$<BF$(TSS-39,TSS-36) AND DIR=-WON THEN F=F-WON
 7150 RETURN 
+```
+
+## RF: Read and print a text file to the modem
+
+```
 8000 GOSUB CLM:CLOSE #FI:OPEN #FI,4,ZR,FL$:IF TST=WON THEN POINT #FI,DSEC,DBIT
 8010 TST=ZR:TRAP 8070:A$(C255)=" ":BF$=""
 8020 XIO 7,#FI,4,ZR,A$:BF$(LEN(BF$)+WON)=A$:NOTE #FI,DSEC,DBIT:GOTO 8020
 8070 TRAP 8075:IF PEEK(856) THEN BF$(LEN(BF$)+WON)=A$(WON,PEEK(856))
 8075 IF PEEK(195)=5 THEN POKE 195,WON:TST=WON:CLOSE #FI:GOTO 8100
 8076 IF PEEK(195)<>5 THEN TST=ZR
+```
+
+## Error handling - PEEK(195) = an error code
+
+```
 8080 IF PEEK(195)<>136 AND PEEK(195)<>139 THEN 8120
 8085 TRAP C8080:IF PEEK(195)=139 THEN POP :POP :POP :POP :POKE 195,WON:TST=ZR:GOTO WR
 8100 IF LOCAL THEN RETURN 
@@ -438,6 +512,11 @@
 8140 GOSUB OPM
 8150 ? #MD;CR$;"SYSTEM ERROR --- TRY AGAIN."
 8160 POP :POP :POP :GOTO MN
+```
+
+## PR: this is unknown
+
+```
 9000 X=ZR:FROM=X:TU=X:DIR=X:IF L$="" THEN RETURN 
 9020 X=X+WON:IF X>LEN(L$) THEN 9100
 9030 IF L$(X,X)>="0" AND L$(X,X)<="9" THEN FROM=FROM*10+VAL(L$(X,X)):GOTO 9020
@@ -449,14 +528,35 @@
 9300 DIR=WON:IF TU<FROM THEN DIR=-WON
 9400 IF X<LEN(L$) THEN L$=L$(X+WON):RETURN 
 9420 L$="":RETURN 
+```
+
+## WR: Lines 10000-11050 are the wait for call and answer modem section
+
+```
 10000 LOCAL=ZR:BEL$=CHR$(253):DEL$=CHR$(156):BS$=CHR$(126):NAM$=" "
 10001 POKE 54018,60:FOR X=1 TO 100:NEXT X
 10010 AMODE=32:LMODE=ZR:XMODE=ZR:GOSUB 1530
 10020 GRAPHICS ZR:? :? 
 10130 POKE 752,WON:POKE 77,ZR
 10150 GOSUB C2010:POSITION MD,5:? "TIME: ";TM$;"   DATE: ";TD$:IF PEEK(53279)=3 THEN 28000
+```
+
+## Line 10151 checks the trigger button on joystick port 0 to drop DTR and hangup the modem before going to the main menu.
+
+```
 10151 IF STRIG(0)=0 THEN POKE 54018,52:TRAP C8080:GOSUB OPM:FOR X=WON TO 50:NEXT X:GOTO 400
+```
+
+## Line 10160 checks for Select pressed to enter local mode.
+
+
+```
 10160 IF PEEK(53279)=5 THEN GOSUB CLM:LOCAL=WON:OPEN #MD,13,ZR,"E:":GOTO 400
+```
+
+## Line 10161 checks for Start pressed to answer the incoming call.
+
+```
 10161 IF PEEK(53279)=6 THEN GOTO 11000
 10162 GOTO 10150
 10170 STATUS #MD,X:IF PEEK(747) THEN GOSUB 10900:? CHR$(253);:GOTO 11000
@@ -469,11 +569,22 @@
 11030 STATUS #MD,X:IF PEEK(747)=0 THEN TRAP C8080:GOSUB OPM:GOTO 400
 11040 GOSUB GC:IF X=73 THEN GOTO WR
 11050 GOTO 11030
+```
+
+## calls for the sysop in Chat Mode
+
+```
+
 12000 ? #MD;"CHAT MODE, I'll get the SYSOP....."
 12010 ? NAM$;" FROM ";AD$:? :? "PRESS SELECT TO BEGIN, ^X TO END"
 12020 FOR F=WON TO 5:? CHR$(253):FOR T=WON TO 50:NEXT T:IF PEEK(CON)=5 THEN 13000
 12030 NEXT F:FOR X=WON TO 500:IF PEEK(CON)=5 THEN 13000
 12040 NEXT X:? #MD;"SYSOP is not here":GOTO MN
+```
+
+## SysOp pressed Start (I think)
+
+```
 13000 GOSUB CLM:? "IN CHAT MODE":GOSUB OPM:? #MD;"CHAT MODE: PRESS CTRL<X> TO END":POKE 764,C255
 13010 STATUS #MD,X:IF PEEK(747)=0 THEN 13040
 13020 GET #MD,X:PUT #MD,X:IF X=8 THEN X=126
@@ -486,11 +597,21 @@
 13054 IF X=6 THEN ? #MD;"Ya?  Well same to you!":GOTO 13030
 13055 IF X=25 THEN ? #MD;"You rang?":GOTO 13030
 13060 PUT #MD,X:GOTO 13030
+```
+
+## if OPTION is pressed at the console (peek(53279)=3), properly save state and exit the BBS
+
+```
 28000 GOSUB 28100:POKE 752,ZR
 28020 END 
 28100 GOSUB CLM:CLOSE #FI:OPEN #FI,C8,ZR,"D:CONFIG"
 28110 ? #FI;CSECT;CR$;CBYTE;CR$;CALLNO;CR$;MSECT;CR$;MBYTE;CR$;MSGS;CR$;HMSG:CLOSE #FI
 28120 RETURN 
+```
+
+## lines 2900-29045 initialize the variables
+
+```
 29000 ZR=0:WON=1:MD=2:C8=8:CON=53279:FI=WON:C24=24:C128=128:C256=256:C2010=2010:C8080=8080:C255=255
 29001 C40=40:C120=120:C121=121:C127=127:C119=119
 29002 DIM L$(C120),FL$(16),NAM$(C40),AD$(C40),FC$(22),MTH$(C24),CTRL$(C40)
@@ -501,24 +622,60 @@
 29035 DIM MIF$(14),MDF$(14),CDF$(14):READ MIF$,MDF$,CDF$
 29040 MTH$="312831303130313130313031"
 29045 CTRL$="/CTRL=^/ ^S PAUSE, ^Q RESUME, ^X QUIT"
+```
+## lines 29050-29190 take input from sysop for time, date, and to insert the work disk
+```
 29050 ? CHR$(125):? "B.B.S."
 29060 GOSUB 1530:? "Enter date mm/dd/yy ";:INPUT TD$
 29070 ? "Enter time hh:mm:ss ";:INPUT TM$:? "Work disk in ";:INPUT A$
 29075 POKE 54017,128:REM RELAY OFF
 29100 CLM=292:OPM=310:MN=1000:GL=70:LET GC=20:PR=9000:WR=10000:RF=8000:SR=7000
 29110 FC$="B?HWXQTREYGLACSKDUFIJM":CR$=CHR$(155)
-29120 OPEN #FI,4,ZR,"D:CONFIG"
+29120 OPEN #FI,4,ZR,"D:CONFIG" 
 29130 INPUT #FI,CSECT,CBYTE,CALLNO,MSECT,MBYTE,MSGS,HMSG:CLOSE #FI
+```
+
+## See how much space is free in memory, set the BF$ to that value - 100
+
+```
 29140 X=FRE(ZR)-100:LPRINT "BUFF = ";X:DIM BF$(X):MAXM=INT(X/40):NUMSECT=8:REM INT(X/128)-WON
+```
+
+## Set the clock (pokes 18,29,20)
+
+```
 29160 X=((VAL(TM$(WON,MD))*60+VAL(TM$(4,5)))*60+VAL(TM$(7,C8)))*60
 29170 F=INT(X/65536):T=INT(X/C256)-F*C256
 29180 X=X-F*65536-T*C256:POKE 20,X:POKE 19,T:POKE 18,F
+```
+
+## Set the modem values
+
+```
 29187 POKE 54019,48
 29188 POKE 54017,128
 29189 POKE 54019,52
+```
+
+## open the K: device and go to the Waitforcall screen
+
+```
 29190 OPEN #3,4,0,"K:":GOTO WR
+```
+
+## sets the message base and caller log data files and locations
+
+```
 30000 DATA D1:MESSAGE.ISM,D1:MESSAGE.DAT,D1:CALLERS.DAT
+```
+
+```
 30200 ? #MD;"Watch this spot for a new option soon!":GOTO MN
+```
+
+## loops waiting for trigger 1 pressed to toggle the relay control line.
+
+```
 30400 POKE 54017,0:FOR X=WON TO 100:NEXT X:IF STRIG(1)=1 THEN POKE 54017,128:FOR X=WON TO 100:NEXT X:GOTO MN
 30401 GOTO 30400
 30500 ? #MD;"Watch this spot for a new option soon!":GOTO MN
